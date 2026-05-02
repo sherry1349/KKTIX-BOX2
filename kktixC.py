@@ -7,22 +7,20 @@ from playwright.sync_api import sync_playwright
 app = Flask(__name__)
 
 # ======================
-# 🔔 Discord 設定
+# 🔐 環境變數（安全做法）
 # ======================
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+KKTIX_EMAIL = os.getenv("KKTIX_EMAIL")
+KKTIX_PASSWORD = os.getenv("KKTIX_PASSWORD")
+USER_ID = os.getenv("DISCORD_USER_ID")
 
-# 👉 改成你的 Discord User ID
-USER_ID = "sherry_1349"
-
-# 🎟 KKTIX網址
 URL = "https://kktix.com/events/ig9ree/registrations/new"
 
-# 🕒 台灣時間
 tw = timezone(timedelta(hours=8))
 
 
 # ======================
-# 📢 通知系統
+# 📢 Discord通知
 # ======================
 def send_normal(msg):
     requests.post(DISCORD_WEBHOOK, json={"content": msg})
@@ -33,7 +31,7 @@ def send_urgent(msg):
 
 
 # ======================
-# 🎟 Playwright查票（核心）
+# 🤖 登入 + 查票（核心）
 # ======================
 def check_ticket():
     try:
@@ -45,13 +43,30 @@ def check_ticket():
 
             page = browser.new_page()
 
+            # ======================
+            # 1️⃣ 登入頁
+            # ======================
+            page.goto("https://kktix.com/users/sign_in", timeout=30000)
+
+            page.fill("input[name='user[email]']", KKTIX_EMAIL)
+            page.fill("input[name='user[password]']", KKTIX_PASSWORD)
+
+            page.click("button[type='submit']")
+            page.wait_for_timeout(5000)
+
+            # ======================
+            # 2️⃣ 進票頁
+            # ======================
             page.goto(URL, timeout=30000)
-            page.wait_for_timeout(5000)  # 等JS跑完
+            page.wait_for_timeout(5000)
 
             content = page.content()
 
             browser.close()
 
+            # ======================
+            # 3️⃣ 判斷有票
+            # ======================
             return ("自行選位" in content or "電腦配位" in content)
 
     except Exception as e:
@@ -60,7 +75,7 @@ def check_ticket():
 
 
 # ======================
-# 🌐 Web入口
+# 🌐 API入口
 # ======================
 @app.route("/")
 def run():
@@ -68,14 +83,14 @@ def run():
 
     now = datetime.now(tw).strftime("%H:%M:%S")
 
-    # 🟡 每小時狀態回報（不 @）
+    # 🟡 每小時回報（不@）
     if mode == "status":
-        send_normal(f"🟡 系統正常運作中（台灣時間 {now}）\n{URL}")
-        return "status ok"
+        send_normal(f"🟡 系統正常運作中（台灣時間 {now}）")
+        return "ok"
 
     # 🔥 查票
     if check_ticket():
-        send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）\n{URL}")
+        send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）")
         return "有票"
 
     return "沒票"
