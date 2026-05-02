@@ -10,13 +10,15 @@ app = Flask(__name__)
 # 🔐 環境變數
 # ======================
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
+
 KKTIX_EMAIL = os.getenv("KKTIX_EMAIL")
 KKTIX_PASSWORD = os.getenv("KKTIX_PASSWORD")
-DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
 
 URL = "https://kktix.com/events/ig9ree/registrations/new"
 
 tw = timezone(timedelta(hours=8))
+
 
 # ======================
 # 📢 Discord
@@ -29,7 +31,45 @@ def send_mention(msg):
 
 
 # ======================
-# 🤖 登入 + 查票（核心）
+# 🔐 KKTIX 登入
+# ======================
+def login(page):
+    page.goto("https://kktix.com/users/sign_in", timeout=30000)
+
+    page.wait_for_load_state("domcontentloaded")
+
+    page.fill("input[name='user[email]']", KKTIX_EMAIL)
+    page.fill("input[name='user[password]']", KKTIX_PASSWORD)
+
+    page.click("button[type='submit']")
+
+    # 等登入完成
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(3000)
+
+
+# ======================
+# 🧠 Angular 完整等待
+# ======================
+def wait_angular_ready(page):
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector("body")
+    page.wait_for_timeout(4000)
+    page.evaluate("() => new Promise(r => setTimeout(r, 1000))")
+
+
+# ======================
+# 🎯 判斷票
+# ======================
+def has_ticket(page):
+    wait_angular_ready(page)
+
+    return page.locator("text=自行選位").count() > 0
+
+
+# ======================
+# 🤖 主檢查流程
 # ======================
 def check_ticket():
     try:
@@ -42,43 +82,23 @@ def check_ticket():
             page = browser.new_page()
 
             # ======================
-            # 1️⃣ 登入 KKTIX
+            # 🔐 1. 登入
             # ======================
-            page.goto("https://kktix.com/users/sign_in", timeout=30000)
-
-            page.fill("input[name='user[email]']", KKTIX_EMAIL)
-            page.fill("input[name='user[password]']", KKTIX_PASSWORD)
-
-            page.click("button[type='submit']")
-            page.wait_for_load_state("networkidle")
+            login(page)
 
             # ======================
-            # 2️⃣ 進活動頁
+            # 🎫 2. 進活動頁
             # ======================
             page.goto(URL, timeout=30000)
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(3000)
 
             # ======================
-            # 3️⃣ 看按鈕狀態（重點）
+            # 🧠 3. 等 Angular
             # ======================
-            buttons = page.query_selector_all("button")
-
-            has_ticket = False
-
-            for btn in buttons:
-                try:
-                    text = btn.inner_text().strip()
-
-                    if any(k in text for k in ["選位", "購買", "立即購買", "Buy"]):
-                        if btn.is_enabled():
-                            has_ticket = True
-                            break
-                except:
-                    continue
+            result = has_ticket(page)
 
             browser.close()
-            return has_ticket
+
+            return result
 
     except Exception as e:
         print("錯誤:", e)
@@ -86,7 +106,7 @@ def check_ticket():
 
 
 # ======================
-# 🌐 API入口
+# 🌐 API
 # ======================
 @app.route("/")
 def run():
@@ -94,14 +114,12 @@ def run():
 
     now = datetime.now(tw).strftime("%H:%M:%S")
 
-    # 🟡 每小時回報
     if mode == "status":
-        send(f"🟡 系統正常運作中（台灣時間 {now}）\n{URL}")
+        send(f"🟡 系統正常（台灣時間 {now}）\n{URL}")
         return "ok"
 
-    # 🔥 查票
     if check_ticket():
-        send_mention(f"🔥 KKTIX 有票了！（台灣時間 {now}）\n{URL}")
+        send_mention(f"🔥 KKTIX 釋票啦 {now}\n{URL}")
         return "有票"
 
     return "沒票"
