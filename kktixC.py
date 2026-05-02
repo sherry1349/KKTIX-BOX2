@@ -1,6 +1,7 @@
-from flask import Flask
+from flask import Flask, request
 import requests
 import os
+import datetime
 
 app = Flask(__name__)
 
@@ -8,22 +9,30 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 URL = "https://kktix.com/events/akiba1/registrations/new"
 
-def send_discord(msg):
+def send(msg):
     requests.post(DISCORD_WEBHOOK, json={"content": msg})
 
 def check_ticket():
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(URL, headers=headers)
-    text = res.text
-    return ("自行選位" in text or "電腦配位" in text)
+    res = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"})
+    return ("自行選位" in res.text or "電腦配位" in res.text)
 
 @app.route("/")
-def run_check():
+def run():
+    mode = request.args.get("mode", "check")
+
+    now = datetime.datetime.now().strftime("%H:%M:%S")
+
+    # 🟡 每小時狀態回報
+    if mode == "status":
+        send(f"🟡 系統正常運作中（{now}）")
+        return "status ok"
+
+    # 🔥 查票模式
     if check_ticket():
-        send_discord("🔥 KKTIX 有票了！")
-        return "有票了"
+        send(f"🔥 KKTIX 有票了！（{now}）")
+        return "有票"
     else:
-        return "還沒票"
+        return "沒票"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
