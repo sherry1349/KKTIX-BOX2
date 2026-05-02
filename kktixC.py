@@ -7,27 +7,25 @@ from playwright.sync_api import sync_playwright
 app = Flask(__name__)
 
 # ======================
-# 🔐 環境變數（安全做法）
+# 🔐 環境變數
 # ======================
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 KKTIX_EMAIL = os.getenv("KKTIX_EMAIL")
 KKTIX_PASSWORD = os.getenv("KKTIX_PASSWORD")
-USER_ID = os.getenv("DISCORD_USER_ID")
+DISCORD_USER_ID = os.getenv("DISCORD_USER_ID")
 
 URL = "https://kktix.com/events/ig9ree/registrations/new"
 
 tw = timezone(timedelta(hours=8))
 
-
 # ======================
-# 📢 Discord通知
+# 📢 Discord
 # ======================
-def send_normal(msg):
+def send(msg):
     requests.post(DISCORD_WEBHOOK, json={"content": msg})
 
-
-def send_urgent(msg):
-    requests.post(DISCORD_WEBHOOK, json={"content": f"<@{USER_ID}> {msg}"})
+def send_mention(msg):
+    requests.post(DISCORD_WEBHOOK, json={"content": f"<@{DISCORD_USER_ID}> {msg}"})
 
 
 # ======================
@@ -44,7 +42,7 @@ def check_ticket():
             page = browser.new_page()
 
             # ======================
-            # 1️⃣ 登入頁
+            # 1️⃣ 登入 KKTIX
             # ======================
             page.goto("https://kktix.com/users/sign_in", timeout=30000)
 
@@ -52,22 +50,35 @@ def check_ticket():
             page.fill("input[name='user[password]']", KKTIX_PASSWORD)
 
             page.click("button[type='submit']")
-            page.wait_for_timeout(5000)
+            page.wait_for_load_state("networkidle")
 
             # ======================
-            # 2️⃣ 進票頁
+            # 2️⃣ 進活動頁
             # ======================
             page.goto(URL, timeout=30000)
-            page.wait_for_timeout(5000)
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(3000)
 
-            content = page.content()
+            # ======================
+            # 3️⃣ 看按鈕狀態（重點）
+            # ======================
+            buttons = page.query_selector_all("button")
+
+            has_ticket = False
+
+            for btn in buttons:
+                try:
+                    text = btn.inner_text().strip()
+
+                    if any(k in text for k in ["選位", "購買", "立即購買", "Buy"]):
+                        if btn.is_enabled():
+                            has_ticket = True
+                            break
+                except:
+                    continue
 
             browser.close()
-
-            # ======================
-            # 3️⃣ 判斷有票
-            # ======================
-            return ("自行選位" in content or "電腦配位" in content)
+            return has_ticket
 
     except Exception as e:
         print("錯誤:", e)
@@ -83,14 +94,14 @@ def run():
 
     now = datetime.now(tw).strftime("%H:%M:%S")
 
-    # 🟡 每小時回報（不@）
+    # 🟡 每小時回報
     if mode == "status":
-        send_normal(f"🟡 系統正常運作中（台灣時間 {now}）")
+        send(f"🟡 系統正常運作中（台灣時間 {now}）\n{URL}")
         return "ok"
 
     # 🔥 查票
     if check_ticket():
-        send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）")
+        send_mention(f"🔥 KKTIX 有票了！（台灣時間 {now}）\n{URL}")
         return "有票"
 
     return "沒票"
