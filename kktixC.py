@@ -2,17 +2,20 @@ from flask import Flask, request
 import requests
 import os
 from datetime import datetime, timezone, timedelta
+from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
-# 🔔 Discord Webhook（:contentReference[oaicite:1]{index=1}）
+# ======================
+# 🔔 Discord 設定
+# ======================
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-# 👉 換成你的 Discord User ID
+# 👉 改成你的 Discord User ID
 USER_ID = "sherry_1349"
 
-# 🎟 KKTIX頁面
-URL = "https://kktix.com/events/akiba1/registrations/new"
+# 🎟 KKTIX網址
+URL = "https://kktix.com/events/ig9ree/registrations/new"
 
 # 🕒 台灣時間
 tw = timezone(timedelta(hours=8))
@@ -22,31 +25,42 @@ tw = timezone(timedelta(hours=8))
 # 📢 通知系統
 # ======================
 def send_normal(msg):
-    requests.post(DISCORD_WEBHOOK, json={
-        "content": msg
-    })
+    requests.post(DISCORD_WEBHOOK, json={"content": msg})
 
 
 def send_urgent(msg):
-    requests.post(DISCORD_WEBHOOK, json={
-        "content": f"<@{USER_ID}> {msg}"
-    })
+    requests.post(DISCORD_WEBHOOK, json={"content": f"<@{USER_ID}> {msg}"})
 
 
 # ======================
-# 🎟 查票邏輯
+# 🎟 Playwright查票（核心）
 # ======================
 def check_ticket():
     try:
-        res = requests.get(URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        html = res.text
-        return ("自行選位" in html or "電腦配位" in html)
-    except:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"]
+            )
+
+            page = browser.new_page()
+
+            page.goto(URL, timeout=30000)
+            page.wait_for_timeout(5000)  # 等JS跑完
+
+            content = page.content()
+
+            browser.close()
+
+            return ("自行選位" in content or "電腦配位" in content)
+
+    except Exception as e:
+        print("錯誤:", e)
         return False
 
 
 # ======================
-# 🌐 API入口
+# 🌐 Web入口
 # ======================
 @app.route("/")
 def run():
@@ -54,14 +68,14 @@ def run():
 
     now = datetime.now(tw).strftime("%H:%M:%S")
 
-    # 🟡 每小時回報（不 @）
+    # 🟡 每小時狀態回報（不 @）
     if mode == "status":
-        send_normal(f"🟡 系統正常運作中（台灣時間 {now}）")
+        send_normal(f"🟡 系統正常運作中（台灣時間 {now}）\n{URL}")
         return "status ok"
 
-    # 🔥 查票模式
+    # 🔥 查票
     if check_ticket():
-        send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）")
+        send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）\n{URL}")
         return "有票"
 
     return "沒票"
