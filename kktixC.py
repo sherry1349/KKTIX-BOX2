@@ -20,11 +20,14 @@ def check_ticket():
 def run():
     mode = request.args.get("mode", "check")
 
-    now = datetime.datetime.now().strftime("%H:%M:%S")
+    from datetime import datetime, timezone, timedelta
+
+    tw = timezone(timedelta(hours=8))
+    now = datetime.now(tw).strftime("%H:%M:%S")
 
     # 🟡 每小時狀態回報
     if mode == "status":
-        send(f"🟡 系統正常運作中（{now}）")
+        send(f"🟡 系統正常運作中（台灣時間{now}）")
         return "status ok"
 
     # 🔥 查票模式
