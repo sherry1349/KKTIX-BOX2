@@ -5,6 +5,6 @@ WORKDIR /app
 COPY . .
 
 RUN pip install -r requirements.txt
-RUN playwright install
+RUN playwright install --with-deps
 
 CMD ["python", "kktixC.py"]
