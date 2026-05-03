@@ -52,7 +52,7 @@ def check_ticket():
 # ======================
 @app.route("/")
 def run():
-    global last_status
+    return "OK"
 
     mode = request.args.get("mode", "check")
     now = datetime.now(tw).strftime("%H:%M:%S")
