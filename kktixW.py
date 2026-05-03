@@ -16,89 +16,77 @@ last_status = None
 
 
 # ======================
-# 📢 通知
+# 📢 通知（不會卡）
 # ======================
 def send_normal(msg):
     try:
-        requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=5)
+        requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=3)
     except:
-        pass
+        print("Discord normal 發送失敗")
 
 
 def send_urgent(msg):
     try:
         requests.post(DISCORD_WEBHOOK, json={
             "content": f"<@{USER_ID}> {msg}"
-        }, timeout=5)
+        }, timeout=3)
     except:
-        pass
+        print("Discord urgent 發送失敗")
 
 
 # ======================
-# 🎟 查票（安全版）
+# 🎟 查票（不會卡）
 # ======================
 def check_ticket():
     try:
-        res = requests.get(API_URL, timeout=5)
+        res = requests.get(API_URL, timeout=3)
 
         if res.status_code != 200:
-            print("API status:", res.status_code)
             return "ERROR"
 
         try:
             data = res.json()
         except:
-            print("JSON 解析失敗")
             return "ERROR"
 
         return data.get("register_status", "UNKNOWN")
 
-    except Exception as e:
-        print("API錯誤:", e)
+    except:
         return "ERROR"
 
 
 # ======================
-# 🌐 API入口
+# 🌐 API入口（保證回應）
 # ======================
 @app.route("/")
 def run():
     global last_status
 
     try:
-        return f"服務正常 / last_status={last_status}"
-
-    except Exception as e:
-        return f"錯誤: {str(e)}"
-
-    try:
         mode = request.args.get("mode", "check")
         now = datetime.now(tw).strftime("%H:%M:%S")
 
-        # 🟡 每小時回報
         if mode == "status":
             send_normal(f"🟡 系統正常運作中（台灣時間 {now}）")
             return "status ok"
 
         status = check_ticket()
 
-        print(f"目前狀態: {status} / 上次狀態: {last_status}")
+        print(f"狀態: {status} / 上次: {last_status}")
 
-        # 🔥 有票
         if status == "IN_STOCK" and last_status != "IN_STOCK":
-            send_urgent(f"🔥 KKTIX 有票了！（台灣時間 {now}）")
+            send_urgent(f"🔥 有票！（{now}）")
 
-        # ❌ 票沒了
         if last_status == "IN_STOCK" and status in ["SOLD_OUT", "OUT_OF_STOCK"]:
-            send_urgent(f"❌ 票已售完或暫無票（台灣時間 {now}）")
+            send_urgent(f"❌ 票沒了！（{now}）")
 
         last_status = status
 
-        return status if status else "unknown"
+        return f"OK - {status}"
 
     except Exception as e:
         print("主程式錯誤:", e)
-        return "服務正常，但發生例外"
+        return "OK（發生例外但已處理）"
 
 
 # ======================
