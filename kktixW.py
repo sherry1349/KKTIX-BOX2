@@ -39,7 +39,16 @@ def send_urgent(msg):
 # ======================
 def check_ticket():
     try:
-        res = requests.get(API_URL, timeout=3)
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://kktix.com/events/akiba1/registrations/new"
+        }
+
+        res = requests.get(API_URL, headers=headers, timeout=3)
+
+        print("status code:", res.status_code)
+        print("response text:", res.text[:200])  # debug 前200字
 
         if res.status_code != 200:
             return "ERROR"
@@ -51,7 +60,8 @@ def check_ticket():
 
         return data.get("register_status", "UNKNOWN")
 
-    except:
+    except Exception as e:
+        print("API錯誤:", e)
         return "ERROR"
 
 
