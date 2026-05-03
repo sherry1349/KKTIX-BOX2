@@ -66,6 +66,12 @@ def run():
     global last_status
 
     try:
+        return f"服務正常 / last_status={last_status}"
+
+    except Exception as e:
+        return f"錯誤: {str(e)}"
+
+    try:
         mode = request.args.get("mode", "check")
         now = datetime.now(tw).strftime("%H:%M:%S")
 
